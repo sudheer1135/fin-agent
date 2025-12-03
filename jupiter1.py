@@ -15,3 +15,11 @@ The HEAD in Git refers to the current branch or commit you are working on. A det
 
 Why it’s Confusing?
 When in a detached HEAD state, any commits you make do not belong to any branch, which can lead to confusion and potential data loss if not handled correctly.
+
+git status
+# Shows:
+# Changes to be committed:
+#   (use "git restore --staged <file>..." to unstage)
+#   modified: file_A.txt
+#   modified: file_C.txt
+Use code with caution.
