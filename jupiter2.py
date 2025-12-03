@@ -11,11 +11,3 @@ git checkout -b new-branch
 Rebase:
 Rebasing moves or combines a sequence of commits to a new base commit.
 git rebase main
-
-git status
-# Shows:
-# Changes to be committed:
-#   (use "git restore --staged <file>..." to unstage)
-#   modified: file_A.txt
-#   modified: file_C.txt
-Use code with caution.
