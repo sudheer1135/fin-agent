@@ -1,5 +1,8 @@
 import json
+import inspect
+from types import SimpleNamespace
 from colorama import Fore, Style
+from fin_agent.config import Config
 from fin_agent.llm.factory import LLMFactory
 from fin_agent.tools.tushare_tools import TOOLS_SCHEMA, execute_tool_call
 
@@ -7,6 +10,21 @@ class FinAgent:
     def __init__(self):
         self.llm = LLMFactory.create_llm()
         self.history = []
+
+    def _to_dict(self, message):
+        """Helper to convert message object to dictionary."""
+        if isinstance(message, dict):
+            return message
+        if hasattr(message, 'model_dump'):
+            return message.model_dump()
+        if hasattr(message, 'to_dict'):
+            return message.to_dict()
+        # Fallback for SimpleNamespace or other objects
+        return {
+            "role": getattr(message, "role", "assistant"),
+            "content": getattr(message, "content", ""),
+            "tool_calls": getattr(message, "tool_calls", None)
+        }
 
     def run(self, user_input):
         """
@@ -33,44 +51,156 @@ class FinAgent:
         ]
 
         step = 0
-        while True:
-            step += 1
-            
-            # Call LLM
-            try:
-                message = self.llm.chat(self.history, tools=TOOLS_SCHEMA, tool_choice="auto")
-            except Exception as e:
-                return f"{Fore.RED}Error: {str(e)}{Style.RESET_ALL}"
-
-            # If no tool calls, this is the final answer
-            if not message.tool_calls:
-                answer = message.content
-                self.history.append(message) # Keep history
-                return answer
-
-            # Handle tool calls
-            self.history.append(message) # Add assistant's message with tool_calls to history
-            
-            print(f"{Fore.YELLOW}Thinking... (Process Tool Calls){Style.RESET_ALL}")
-
-            for tool_call in message.tool_calls:
-                function_name = tool_call.function.name
-                arguments = tool_call.function.arguments
-                call_id = tool_call.id
+        try:
+            while True:
+                step += 1
                 
-                print(f"{Fore.CYAN}Calling Tool: {function_name} with args: {arguments}{Style.RESET_ALL}")
-                
-                # Execute tool
-                tool_result = execute_tool_call(function_name, arguments)
-                
-                # Truncate result if too long for display, but keep full for LLM (context window permitting)
-                # For very large dataframes, we might need to summarize, but Tushare daily data for one stock is usually fine.
-                display_result = tool_result[:200] + "..." if len(str(tool_result)) > 200 else tool_result
-                print(f"{Fore.BLUE}Tool Result: {display_result}{Style.RESET_ALL}")
+                # Call LLM
+                try:
+                    # Determine stream mode from Config
+                    stream_mode = Config.LLM_STREAM
+                    
+                    response = self.llm.chat(self.history, tools=TOOLS_SCHEMA, tool_choice="auto", stream=stream_mode)
+                    
+                    message = None
+                    
+                    if stream_mode and inspect.isgenerator(response):
+                        # Handle Streaming Response
+                        print(f"{Fore.CYAN}Agent: {Style.RESET_ALL}", end="", flush=True)
+                        
+                        full_content = ""
+                        stream_interrupted = False
+                        
+                        # Buffer for handling <think> tags
+                        buffer = ""
+                        thinking_state = False
+                        
+                        try:
+                            for chunk in response:
+                                if chunk['type'] == 'content':
+                                    content = chunk['content']
+                                    full_content += content # Store full raw content
+                                    
+                                    buffer += content
+                                    
+                                    while True:
+                                        if not thinking_state:
+                                            if "<think>" in buffer:
+                                                # Split content before <think>
+                                                pre, buffer = buffer.split("<think>", 1)
+                                                if pre:
+                                                    print(pre, end="", flush=True)
+                                                
+                                                # Switch to thinking style
+                                                print(f"{Style.DIM}{Fore.YELLOW}", end="", flush=True)
+                                                thinking_state = True
+                                            else:
+                                                # Optimization: avoid printing potential partial tag
+                                                # <think> length is 7
+                                                if len(buffer) < 7:
+                                                    break
+                                                
+                                                # Print safe part
+                                                to_print = buffer[:-6]
+                                                buffer = buffer[-6:]
+                                                print(to_print, end="", flush=True)
+                                                break
+                                        
+                                        else: # thinking_state is True
+                                            if "</think>" in buffer:
+                                                # Split content before </think>
+                                                pre, buffer = buffer.split("</think>", 1)
+                                                if pre:
+                                                    print(pre, end="", flush=True)
+                                                
+                                                # Switch back to normal style
+                                                print(Style.RESET_ALL, end="", flush=True)
+                                                thinking_state = False
+                                                
+                                                # Consume potential newline after </think> if it starts the remaining buffer
+                                                if buffer.startswith("\n"):
+                                                    buffer = buffer[1:]
+                                                elif buffer.startswith("\r\n"): # Handle Windows newline
+                                                    buffer = buffer[2:]
+                                            else:
+                                                # </think> length is 8
+                                                if len(buffer) < 8:
+                                                    break
+                                                
+                                                to_print = buffer[:-7]
+                                                buffer = buffer[-7:]
+                                                print(to_print, end="", flush=True)
+                                                break
+                                    
+                                elif chunk['type'] == 'response':
+                                    message = chunk['response']
+                            
+                            # Print remaining buffer
+                            if buffer:
+                                print(buffer, end="", flush=True)
+                            
+                            # Ensure reset if still thinking (unlikely for well-formed output)
+                            if thinking_state:
+                                print(Style.RESET_ALL, end="", flush=True)
+                                
+                        except KeyboardInterrupt:
+                            stream_interrupted = True
+                            print(f"{Style.RESET_ALL}\n{Fore.YELLOW}[Output interrupted]{Style.RESET_ALL}")
+                        
+                        if stream_interrupted:
+                             # Save partial content if any
+                             if full_content:
+                                 message = SimpleNamespace(role="assistant", content=full_content, tool_calls=None)
+                                 self.history.append(message)
+                             return ""
 
-                # Append tool result to history
-                self.history.append({
-                    "role": "tool",
-                    "tool_call_id": call_id,
-                    "content": str(tool_result)
-                })
+                        # If we printed content, add a newline at the end
+                        if full_content and not thinking_state and not full_content.endswith("\n"):
+                            print() 
+ 
+                            
+                    else:
+                        # Handle Normal Response
+                        message = response
+
+                except Exception as e:
+                    return f"{Fore.RED}Error: {str(e)}{Style.RESET_ALL}"
+
+                # If no tool calls, this is the final answer
+                if not message.tool_calls:
+                    answer = message.content
+                    self.history.append(self._to_dict(message)) # Keep history
+                    
+                    if stream_mode:
+                        return "" # Already printed
+                    else:
+                        return answer
+
+                # Handle tool calls
+                self.history.append(self._to_dict(message)) # Add assistant's message with tool_calls to history
+
+                for tool_call in message.tool_calls:
+                    function_name = tool_call.function.name
+                    arguments = tool_call.function.arguments
+                    call_id = tool_call.id
+                    
+                    print(f"{Fore.CYAN}Calling Tool: {function_name} with args: {arguments}{Style.RESET_ALL}")
+                    
+                    # Execute tool
+                    tool_result = execute_tool_call(function_name, arguments)
+                    
+                    # Truncate result if too long for display, but keep full for LLM (context window permitting)
+                    display_result = tool_result[:200] + "..." if len(str(tool_result)) > 200 else tool_result
+                    print(f"{Fore.BLUE}Tool Result: {display_result}{Style.RESET_ALL}")
+
+                    # Append tool result to history
+                    self.history.append({
+                        "role": "tool",
+                        "tool_call_id": call_id,
+                        "content": str(tool_result)
+                    })
+
+        except KeyboardInterrupt:
+            # Catch global interruptions (e.g. during tool execution or thinking)
+            print(f"\n{Fore.YELLOW}[Interrupted by user]{Style.RESET_ALL}")
+            return ""

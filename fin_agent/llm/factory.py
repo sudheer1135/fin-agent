@@ -9,7 +9,7 @@ class LLMFactory:
         
         if provider == "deepseek":
             return DeepSeekClient()
-        elif provider == "openai":
+        elif provider == "openai" or provider == "local":
             # Generic OpenAI compatible
             return OpenAICompatibleClient(
                 api_key=Config.OPENAI_API_KEY,

@@ -30,11 +30,10 @@
 
 ## 🛠️ 阶段三：架构升级与高级分析 (v0.3.x - v0.4.x) [进行中]
 
-- [ ] **多模型接入 (Multi-LLM Support)**：
+- [x] **多模型接入 (Multi-LLM Support)**：[已完成]
     - [x] 抽象 LLM 接口层，支持配置切换不同模型。
-    - [ ] 接入 OpenAI (GPT-4/3.5), Anthropic (Claude 3)。
     - [x] 接入国内大模型 (Kimi, 智谱 GLM-4, 阿里 Qwen)。
-    - [ ] 支持本地模型 (通过 Ollama 接入 Llama 3, Mistral)。
+    - [x] 支持本地模型 (通过 Ollama 接入 Llama 3, Mistral)。
 - [ ] **多模态分析**：
     - [ ] 支持上传 K 线图截图进行技术面分析。
     - [ ] 支持上传财报 PDF 进行深度解读。
@@ -59,6 +58,9 @@
     - [ ] 适配微信小程序或移动 App。
 
 ## 暂不纳入但未来可能要做的
+
+- [ ] **多模型接入 (Multi-LLM Support)**：
+    - [ ] 接入 OpenAI (GPT-4/3.5), Anthropic (Claude 3)。
 
 - [ ] **新闻与舆情**：
     - [ ] 接入财经快讯 (新浪、华尔街见闻等)。

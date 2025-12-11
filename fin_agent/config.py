@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 class Config:
     TUSHARE_TOKEN = None
     LLM_PROVIDER = None
+    LLM_STREAM = True
     
     # DeepSeek Config
     DEEPSEEK_API_KEY = None
@@ -56,6 +57,7 @@ class Config:
         
         cls.TUSHARE_TOKEN = os.getenv("TUSHARE_TOKEN")
         cls.LLM_PROVIDER = os.getenv("LLM_PROVIDER", "deepseek")
+        cls.LLM_STREAM = os.getenv("LLM_STREAM", "True").lower() == "true"
         
         cls.DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
         cls.DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
@@ -75,9 +77,12 @@ class Config:
         if cls.LLM_PROVIDER == "deepseek":
             if not cls.DEEPSEEK_API_KEY:
                 missing.append("DEEPSEEK_API_KEY")
-        elif cls.LLM_PROVIDER == "openai":
-             if not cls.OPENAI_API_KEY:
-                missing.append("OPENAI_API_KEY")
+        elif cls.LLM_PROVIDER == "openai" or cls.LLM_PROVIDER == "local":
+             if not cls.OPENAI_API_KEY and cls.LLM_PROVIDER != "local":
+                # For strictly OpenAI provider, key is usually required.
+                # For 'local', we might allow empty key if user really wants to, 
+                # but standard check:
+                pass
         
         if missing:
             raise ValueError(f"Missing environment variables: {', '.join(missing)}")
@@ -97,8 +102,9 @@ class Config:
         print("5. Qwen (Aliyun DashScope)")
         print("6. SiliconFlow (Aggregator)")
         print("7. Custom (Manual Input)")
+        print("8. Local / Self-Hosted (Ollama, LM Studio, etc.)")
         
-        choice = input("Enter choice (1-7): ").strip()
+        choice = input("Enter choice (1-8): ").strip()
         
         provider = "deepseek"
         deepseek_key = ""
@@ -150,6 +156,14 @@ class Config:
                 print(f"Using Base URL: {openai_base}")
                 openai_key = input("Enter SiliconFlow API Key: ").strip()
                 openai_model = input(f"Enter Model Name [default: {default_model}]: ").strip() or default_model
+
+            elif choice == "8": # Local
+                provider = "local"
+                default_base = "http://localhost:11434/v1"
+                openai_base = input(f"Enter Base URL [default: {default_base}]: ").strip() or default_base
+                default_model = "llama3"
+                openai_model = input(f"Enter Model Name [default: {default_model}]: ").strip() or default_model
+                openai_key = "ollama" # Local models usually don't need a key, setting dummy
                 
             else: # Custom
                 openai_key = input("Enter API Key: ").strip()
