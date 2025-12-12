@@ -33,9 +33,6 @@ Fin-Agent 需要以下两个 API 密钥才能正常工作：
 1.  **Tushare Token**: 用于获取金融数据 ([注册 Tushare](https://tushare.pro/))
 2.  **LLM API Key**: 用于驱动智能对话。默认支持 DeepSeek，也支持 Kimi (Moonshot), 智谱 (ZhipuAI), 阿里 (DashScope) 等。
 
-### 自动配置
-首次运行程序时，如果没有检测到配置文件，Fin-Agent 会自动进入设置向导，引导您输入 API 密钥。配置将自动保存到您的用户目录下。
-
 ## 💻 命令行参数
 
 Fin-Agent 提供了一些实用的命令行参数来管理配置和版本：

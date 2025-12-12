@@ -292,6 +292,125 @@ def get_concept_detail(concept_name=None, ts_code=None):
     except Exception as e:
         return f"Error fetching concept detail: {str(e)}"
 
+def screen_stocks(pe_min=None, pe_max=None, pb_min=None, pb_max=None, 
+                  mv_min=None, mv_max=None, dv_min=None, 
+                  turnover_min=None, turnover_max=None,
+                  industry=None, limit=20):
+    """
+    Screen stocks based on fundamental and technical indicators.
+    """
+    try:
+        pro = get_pro()
+        
+        # 1. Determine the latest trading date
+        # We can't easily query "latest", so we check today, if empty, check yesterday, etc.
+        # A more robust way is to use trade_cal or just try loop back a few days.
+        now = datetime.now()
+        found_date = None
+        df_daily = pd.DataFrame()
+        
+        # Try last 5 days to find data
+        for i in range(5):
+            date_str = (now - timedelta(days=i)).strftime('%Y%m%d')
+            # Fetch basic daily data for ALL stocks on this date
+            # Note: Tushare limits might apply, but daily_basic usually allows full fetch for one date
+            try:
+                # We need to fetch enough fields for filtering
+                # total_mv is in 10k CNY usually? Tushare docs say: total_mv: 总市值 （万元）
+                df = pro.daily_basic(trade_date=date_str, 
+                                   fields='ts_code,trade_date,close,pe,pe_ttm,pb,total_mv,turnover_rate,dv_ratio')
+                if not df.empty:
+                    df_daily = df
+                    found_date = date_str
+                    break
+            except:
+                continue
+                
+        if df_daily.empty:
+            return "Error: Could not fetch daily basic data for the last 5 days."
+            
+        # 2. Filter by Industry if specified
+        if industry:
+            # Fuzzy match industry name in stock_basic
+            # First get all stocks (cached ideally, but here we fetch)
+            df_basic = pro.stock_basic(exchange='', list_status='L', fields='ts_code,name,industry')
+            
+            # Filter stock_basic by industry
+            # Check if industry is in the 'industry' column
+            # Ensure column is string
+            df_basic['industry'] = df_basic['industry'].astype(str)
+            target_stocks = df_basic[df_basic['industry'].str.contains(industry, na=False)]
+            
+            if target_stocks.empty:
+                return f"No stocks found in industry matching '{industry}'."
+                
+            # Filter df_daily to only include these stocks
+            df_daily = df_daily[df_daily['ts_code'].isin(target_stocks['ts_code'])]
+            
+            if df_daily.empty:
+                return f"No data found for stocks in industry '{industry}' on {found_date}."
+
+        # 3. Apply numeric filters
+        # Handle PE (using pe_ttm usually better, or just pe)
+        if pe_min is not None:
+            df_daily = df_daily[df_daily['pe_ttm'] >= float(pe_min)]
+        if pe_max is not None:
+            df_daily = df_daily[df_daily['pe_ttm'] <= float(pe_max)]
+            
+        if pb_min is not None:
+            df_daily = df_daily[df_daily['pb'] >= float(pb_min)]
+        if pb_max is not None:
+            df_daily = df_daily[df_daily['pb'] <= float(pb_max)]
+            
+        # Market Value (total_mv is in 10k, usually we filter by 'Yi' (100 million))
+        # Input mv_min usually implies 'Yi'. So 100 Yi = 100 * 10000 (unit in table)
+        # Let's assume input is in 100 Million (Yi)
+        if mv_min is not None:
+            df_daily = df_daily[df_daily['total_mv'] >= float(mv_min) * 10000]
+        if mv_max is not None:
+            df_daily = df_daily[df_daily['total_mv'] <= float(mv_max) * 10000]
+            
+        if dv_min is not None:
+            df_daily = df_daily[df_daily['dv_ratio'] >= float(dv_min)]
+            
+        if turnover_min is not None:
+            df_daily = df_daily[df_daily['turnover_rate'] >= float(turnover_min)]
+        if turnover_max is not None:
+            df_daily = df_daily[df_daily['turnover_rate'] <= float(turnover_max)]
+            
+        # 4. Return results
+        if df_daily.empty:
+            return "No stocks found matching the criteria."
+            
+        # Add Name and Industry to result for better readability
+        # If we didn't fetch stock_basic yet
+        if not industry: # If industry was filtered, we already have target_stocks, but easier to just fetch specific codes or all again
+             # Fetch names for the result codes
+             codes = df_daily['ts_code'].tolist()
+             # If too many codes, fetching all basic might be faster than chunks? 
+             # stock_basic returns ~5000 rows, fast enough.
+             df_basic = pro.stock_basic(exchange='', list_status='L', fields='ts_code,name,industry')
+        
+        # Merge to get Name and Industry
+        result = pd.merge(df_daily, df_basic[['ts_code', 'name', 'industry']], on='ts_code', how='left')
+        
+        # Sort by Market Value desc by default if no other sort implied? 
+        # Or maybe PE asc? Let's sort by Total MV desc to show big companies first
+        result = result.sort_values('total_mv', ascending=False)
+        
+        # Limit
+        result = result.head(limit)
+        
+        # Format columns
+        # total_mv convert to Yi for display? 
+        # Let's just return JSON and let LLM interpret, but adding a hint is good.
+        # We return raw data, LLM can format.
+        
+        return result.to_json(orient='records', force_ascii=False)
+
+    except Exception as e:
+        return f"Error executing stock screen: {str(e)}"
+
 # Tool definitions for LLM
 TOOLS_SCHEMA = [
     {
@@ -607,6 +726,30 @@ TOOLS_SCHEMA = [
                 "required": ["ts_code"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "screen_stocks",
+            "description": "Smart stock picker/screener. Filter stocks based on fundamental indicators (PE, PB, Market Value, Dividend) and industry.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pe_min": {"type": "number", "description": "Minimum PE (TTM) ratio."},
+                    "pe_max": {"type": "number", "description": "Maximum PE (TTM) ratio. Use this for 'low PE' criteria."},
+                    "pb_min": {"type": "number", "description": "Minimum PB ratio."},
+                    "pb_max": {"type": "number", "description": "Maximum PB ratio."},
+                    "mv_min": {"type": "number", "description": "Minimum Market Value (in 100 Million/Yi CNY). e.g., 100 for 100 Yi."},
+                    "mv_max": {"type": "number", "description": "Maximum Market Value (in 100 Million/Yi CNY)."},
+                    "dv_min": {"type": "number", "description": "Minimum Dividend Yield (%). e.g., 3 for >3%."},
+                    "turnover_min": {"type": "number", "description": "Minimum Turnover Rate (%)."},
+                    "turnover_max": {"type": "number", "description": "Maximum Turnover Rate (%)."},
+                    "industry": {"type": "string", "description": "Industry name to filter by (fuzzy match). e.g., '银行', '半导体'."},
+                    "limit": {"type": "integer", "description": "Max number of results to return. Default 20."}
+                },
+                "required": []
+            }
+        }
     }
 ]
 
@@ -648,5 +791,7 @@ def execute_tool_call(tool_name, arguments):
         return get_technical_indicators(**arguments)
     elif tool_name == "get_technical_patterns":
         return get_technical_patterns(**arguments)
+    elif tool_name == "screen_stocks":
+        return screen_stocks(**arguments)
     else:
         return f"Error: Tool '{tool_name}' not found."
