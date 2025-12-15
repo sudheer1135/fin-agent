@@ -85,21 +85,23 @@ class FinAgent:
                         live_md = None
                         md_buffer = ""
 
-                        def update_md(text):
-                            nonlocal live_md, md_buffer
-                            md_buffer += text
-                            if live_md is None:
-                                live_md = Live(FinMarkdown(md_buffer), auto_refresh=True, vertical_overflow="visible")
-                                live_md.start()
-                            else:
-                                live_md.update(FinMarkdown(md_buffer))
-                        
                         def stop_md():
                             nonlocal live_md, md_buffer
                             if live_md:
                                 live_md.stop()
                                 live_md = None
                                 md_buffer = ""
+
+                        def update_md(text):
+                            nonlocal live_md, md_buffer
+                            md_buffer += text
+                            if live_md is None:
+                                # refresh_per_second controls how often the screen is updated
+                                # Lowering it slightly might help with flickering, but keeping it smooth
+                                live_md = Live(FinMarkdown(md_buffer), auto_refresh=True, refresh_per_second=4, vertical_overflow="visible")
+                                live_md.start()
+                            else:
+                                live_md.update(FinMarkdown(md_buffer))
 
                         try:
                             for chunk in response:
