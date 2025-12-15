@@ -1,5 +1,6 @@
 import json
 import os
+from io import StringIO
 from typing import Dict, List, Optional
 from datetime import datetime
 import pandas as pd
@@ -142,7 +143,7 @@ class PortfolioManager:
                     current_price = cost # Fallback to cost if fails? Or 0? Let's keep cost to avoid panic, but mark it
                     current_price_str = f"{cost} (Est.)"
                 else:
-                    df = pd.read_json(price_json, orient='records')
+                    df = pd.read_json(StringIO(price_json), orient='records')
                     if not df.empty:
                         # Tushare realtime returns 'price', 'bid', 'ask', etc.
                         # Sometimes 'price' is the current price.
