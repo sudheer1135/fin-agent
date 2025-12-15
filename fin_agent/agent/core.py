@@ -88,7 +88,7 @@ class FinAgent:
                             nonlocal live_md, md_buffer
                             md_buffer += text
                             if live_md is None:
-                                live_md = Live(FinMarkdown(md_buffer), auto_refresh=True)
+                                live_md = Live(FinMarkdown(md_buffer), auto_refresh=True, vertical_overflow="visible")
                                 live_md.start()
                             else:
                                 live_md.update(FinMarkdown(md_buffer))
