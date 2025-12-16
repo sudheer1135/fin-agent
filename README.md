@@ -188,6 +188,6 @@ Fin-Agent 支持丰富的金融分析场景，您可以参考以下对话来探�
 
 本项目采用 [MIT License](LICENSE) 开源许可证。
 
-## 👥 贡献者
+## 👥 开源贡献
 
-[![Contributors](https://contrib.rocks/image?repo=YUHAI0/fin-agent)](https://github.com/YUHAI0/fin-agent/graphs/contributors)
+![Alt](https://repobeats.axiom.co/api/embed/788a8349b9decac56318a205859ba6d52b2edddd.svg "Repobeats analytics image")
