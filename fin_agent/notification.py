@@ -9,14 +9,15 @@ logger = logging.getLogger(__name__)
 
 class NotificationManager:
     @staticmethod
-    def send_email(subject, content, receiver=None):
+    def send_email(subject, content, receiver=None, html_content=None):
         """
         Send an email notification.
         
         Args:
             subject (str): Email subject
-            content (str): Email body content
+            content (str): Email body content (plain text)
             receiver (str, optional): Receiver email. If None, sends to self (EMAIL_SENDER).
+            html_content (str, optional): Email HTML content.
         
         Returns:
             bool: True if successful, False otherwise.
@@ -34,12 +35,19 @@ class NotificationManager:
             receiver = sender
             
         try:
-            message = MIMEMultipart()
+            # Create message container - the correct MIME type is multipart/alternative
+            message = MIMEMultipart('alternative')
             message['From'] = Header(sender, 'utf-8')
             message['To'] = Header(receiver, 'utf-8')
             message['Subject'] = Header(subject, 'utf-8')
             
-            message.attach(MIMEText(content, 'plain', 'utf-8'))
+            # Record the MIME types of both parts - text/plain and text/html.
+            part1 = MIMEText(content, 'plain', 'utf-8')
+            message.attach(part1)
+            
+            if html_content:
+                part2 = MIMEText(html_content, 'html', 'utf-8')
+                message.attach(part2)
             
             # Connect to server
             if smtp_port == 465:

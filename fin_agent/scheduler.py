@@ -201,18 +201,83 @@ class TaskScheduler:
                 triggered = True
                 
             if triggered:
-                subject = f"Price Alert: {ts_code} {operator} {threshold}"
                 stock_name = record.get('name', ts_code)
+                # 优化邮件标题，使其看起来更正规，减少被识别为垃圾邮件的可能
+                subject = f"[Fin-Agent] 股价提醒: {stock_name} ({ts_code}) 触发条件"
+                
+                # 优化纯文本内容
                 content = (
-                    f"Price Alert Triggered!\n\n"
-                    f"Stock: {stock_name} ({ts_code})\n"
-                    f"Current Price: {current_price}\n"
-                    f"Condition: Price {operator} {threshold}\n"
-                    f"Time: {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+                    f"股价提醒通知\n"
+                    f"================================\n"
+                    f"股票名称: {stock_name}\n"
+                    f"股票代码: {ts_code}\n"
+                    f"当前价格: {current_price}\n"
+                    f"触发条件: 价格 {operator} {threshold}\n"
+                    f"触发时间: {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+                    f"================================\n"
+                    f"此邮件由 Fin-Agent 自动发送。"
                 )
                 
+                # 添加HTML内容，提升邮件质量
+                price_color = "#d9534f" if operator.startswith('>') else "#5cb85c" # 涨红跌绿(或根据涨跌逻辑调整)
+                html_content = f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="utf-8">
+                    <title>股价提醒</title>
+                    <style>
+                        body {{ font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }}
+                        .container {{ max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); overflow: hidden; }}
+                        .header {{ background-color: #0056b3; color: #ffffff; padding: 20px; text-align: center; }}
+                        .header h2 {{ margin: 0; font-size: 24px; }}
+                        .content {{ padding: 30px; }}
+                        .stock-info {{ background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin-bottom: 20px; border-left: 4px solid #0056b3; }}
+                        .info-row {{ display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }}
+                        .info-row:last-child {{ border-bottom: none; margin-bottom: 0; padding-bottom: 0; }}
+                        .label {{ font-weight: bold; color: #666; }}
+                        .value {{ font-weight: 500; color: #333; }}
+                        .price {{ font-size: 18px; font-weight: bold; color: {price_color}; }}
+                        .footer {{ background-color: #eee; color: #888; padding: 15px; text-align: center; font-size: 12px; }}
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">
+                            <h2>股价提醒通知</h2>
+                        </div>
+                        <div class="content">
+                            <p>您好，您关注的股票已触发提醒条件：</p>
+                            <div class="stock-info">
+                                <div class="info-row">
+                                    <span class="label">股票名称</span>
+                                    <span class="value">{stock_name}</span>
+                                </div>
+                                <div class="info-row">
+                                    <span class="label">股票代码</span>
+                                    <span class="value">{ts_code}</span>
+                                </div>
+                                <div class="info-row">
+                                    <span class="label">当前价格</span>
+                                    <span class="value price">{current_price}</span>
+                                </div>
+                                <div class="info-row">
+                                    <span class="label">触发条件</span>
+                                    <span class="value">价格 {operator} {threshold}</span>
+                                </div>
+                            </div>
+                            <p>触发时间：{time.strftime('%Y-%m-%d %H:%M:%S')}</p>
+                        </div>
+                        <div class="footer">
+                            <p>此邮件由 Fin-Agent 智能助手自动发送，请勿直接回复。</p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+                """
+                
                 print(f"\n[Scheduler] Triggering task {task['id']}: {subject}")
-                success = NotificationManager.send_email(subject, content, email)
+                success = NotificationManager.send_email(subject, content, email, html_content=html_content)
                 
                 if success:
                     print(f"[Scheduler] Email sent to {email}")
