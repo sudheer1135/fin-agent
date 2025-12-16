@@ -238,8 +238,28 @@ class TaskScheduler:
         # 1 minute is safe.
         schedule.every(1).minutes.do(self.check_conditions)
         
+        last_heartbeat = 0
+        
         while True:
             try:
+                # In worker mode, ensure PID file exists (restore if deleted by others)
+                # AND update modification time as a heartbeat
+                if self.verbose:
+                    current_time = time.time()
+                    if current_time - last_heartbeat > 5: # Every 5 seconds
+                        try:
+                            if not os.path.exists(self.pid_file):
+                                with open(self.pid_file, 'w') as f:
+                                    f.write(str(os.getpid()))
+                                logger.warning("Restored missing PID file.")
+                            else:
+                                # Update mtime to indicate liveness
+                                os.utime(self.pid_file, None)
+                            
+                            last_heartbeat = current_time
+                        except Exception as e:
+                            logger.error(f"Failed to update PID file heartbeat: {e}")
+
                 schedule.run_pending()
                 time.sleep(1)
             except Exception as e:
@@ -247,36 +267,29 @@ class TaskScheduler:
                 time.sleep(5)
 
     def _is_worker_running(self):
-        """Check if a worker process is running using PID file."""
+        """Check if a worker process is running using PID file heartbeat."""
         if not os.path.exists(self.pid_file):
             return False
             
         try:
-            with open(self.pid_file, 'r') as f:
-                content = f.read().strip()
-                if not content:
-                    return False
-                pid = int(content)
+            # Check if file was updated recently (heartbeat)
+            # This avoids using os.kill which can be problematic on Windows
+            mtime = os.path.getmtime(self.pid_file)
+            age = time.time() - mtime
             
-            # Check if process exists
-            try:
-                os.kill(pid, 0) # Signal 0 doesn't kill, just checks existence
+            # If heartbeat is within 20 seconds (worker updates every 5s), it's alive.
+            if age < 20:
                 return True
-            except OSError as e:
-                # Handle specific errors
-                if e.errno == errno.ESRCH: # No such process
-                    logger.info(f"Found stale PID file (PID {pid}), removing...")
-                    try:
-                        os.remove(self.pid_file)
-                    except OSError:
-                        pass # Ignore if already gone
-                    return False
-                elif e.errno == errno.EPERM: # Permission denied (Process exists)
-                    return True
-                else:
-                    # Other error, assume process exists to be safe
-                    logger.warning(f"Error checking PID {pid}: {e}")
-                    return True
+                
+            # If file is older, it might be stale.
+            # We assume it's NOT running to avoid blocking the interactive scheduler forever
+            # in case of a crash.
+            
+            # Note: This means if the user is running an OLD version of the worker
+            # that doesn't update mtime, this will return False, and we will start
+            # a duplicate scheduler. This is a safe degradation compared to killing the process.
+            return False
+            
         except Exception as e:
             logger.error(f"Error checking worker status: {e}")
             return False
@@ -290,7 +303,9 @@ class TaskScheduler:
             return
 
         if self._is_worker_running():
-            print(f"[{time.strftime('%H:%M:%S')}] Detected active Worker process. Interactive scheduler disabled to avoid duplicates.")
+            # In interactive mode, we don't want to print to stdout as it might interfere with TUI
+            # But fin-agent is CLI based, so print is fine.
+            # print(f"[{time.strftime('%H:%M:%S')}] Detected active Worker process. Interactive scheduler disabled to avoid duplicates.")
             return
 
         t = threading.Thread(target=self.run_scheduler, daemon=True)
@@ -311,7 +326,19 @@ class TaskScheduler:
         try:
             self.verbose = True
             self.run_scheduler()
+        except KeyboardInterrupt:
+            print("\nWorker stopped by user.")
+        except Exception as e:
+            logger.error(f"Worker crashed: {e}")
+            print(f"\nWorker crashed: {e}")
         finally:
             # Clean up PID file on exit
             if os.path.exists(self.pid_file):
-                os.remove(self.pid_file)
+                try:
+                    # Check if it's still our PID before deleting
+                    with open(self.pid_file, 'r') as f:
+                        content = f.read().strip()
+                    if content == str(pid):
+                        os.remove(self.pid_file)
+                except Exception:
+                    pass
