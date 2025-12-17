@@ -9,6 +9,16 @@ class LLMFactory:
         
         if provider == "deepseek":
             return DeepSeekClient()
+        elif provider == "openrouter":
+            return OpenAICompatibleClient(
+                api_key=Config.OPENAI_API_KEY,
+                base_url=Config.OPENAI_BASE_URL,
+                model=Config.OPENAI_MODEL,
+                default_headers={
+                    "HTTP-Referer": "https://github.com/fin-agent/fin-agent",
+                    "X-Title": "Fin-Agent CLI"
+                }
+            )
         elif provider == "openai" or provider == "local":
             # Generic OpenAI compatible
             return OpenAICompatibleClient(

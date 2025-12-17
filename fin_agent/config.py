@@ -91,7 +91,7 @@ class Config:
         if cls.LLM_PROVIDER == "deepseek":
             if not cls.DEEPSEEK_API_KEY:
                 missing.append("DEEPSEEK_API_KEY")
-        elif cls.LLM_PROVIDER == "openai" or cls.LLM_PROVIDER == "local":
+        elif cls.LLM_PROVIDER in ["openai", "local", "openrouter"]:
              if not cls.OPENAI_API_KEY and cls.LLM_PROVIDER != "local":
                 # For strictly OpenAI provider, key is usually required.
                 # For 'local', we might allow empty key if user really wants to, 
@@ -243,10 +243,11 @@ class Config:
         print("4. Yi (01.AI)")
         print("5. Qwen (Aliyun DashScope)")
         print("6. SiliconFlow (Aggregator)")
-        print("7. Custom (Manual Input)")
-        print("8. Local / Self-Hosted (Ollama, LM Studio, etc.)")
+        print("7. OpenRouter")
+        print("8. Custom (Manual Input)")
+        print("9. Local / Self-Hosted (Ollama, LM Studio, etc.)")
         
-        choice = input("Enter choice (1-8): ").strip()
+        choice = input("Enter choice (1-9): ").strip()
         
         provider = "deepseek"
         deepseek_key = ""
@@ -301,14 +302,22 @@ class Config:
                 openai_key = input("Enter SiliconFlow API Key: ").strip()
                 openai_model = input(f"Enter Model Name [default: {default_model}]: ").strip() or default_model
 
-            elif choice == "8": # Local
+            elif choice == "7": # OpenRouter
+                provider = "openrouter"
+                openai_base = "https://openrouter.ai/api/v1"
+                default_model = "google/gemini-2.0-flash-exp:free"
+                print(f"Using Base URL: {openai_base}")
+                openai_key = input("Enter OpenRouter API Key: ").strip()
+                openai_model = input(f"Enter Model Name [default: {default_model}]: ").strip() or default_model
+
+            elif choice == "9": # Local
                 provider = "local"
                 default_base = "http://localhost:11434/v1"
                 openai_base = input(f"Enter Base URL [default: {default_base}]: ").strip() or default_base
                 default_model = "llama3"
                 openai_model = input(f"Enter Model Name [default: {default_model}]: ").strip() or default_model
                 openai_key = "ollama" 
-                
+
             else: # Custom
                 openai_key = input("Enter API Key: ").strip()
                 openai_base = input("Enter Base URL: ").strip()
@@ -327,27 +336,49 @@ class Config:
 
     @classmethod
     def clear(cls):
-        """Clear the configuration file."""
-        env_path = cls.get_env_path()
-        if os.path.exists(env_path):
-            os.remove(env_path)
-            print(f"Configuration file removed: {env_path}")
-        else:
-            print(f"No configuration file found at: {env_path}")
-            
-        # Also clear local .env if it exists
-        local_env = os.path.join(os.getcwd(), ".env")
-        if os.path.exists(local_env):
-            os.remove(local_env)
-            print(f"Local configuration file removed: {local_env}")
-            
-        # Clear environment variables
-        env_vars = [
+        """Clear the configuration file (preserves email config)."""
+        env_vars_to_clear = [
             "TUSHARE_TOKEN", "LLM_PROVIDER", 
             "DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "DEEPSEEK_MODEL",
             "OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL"
         ]
-        for var in env_vars:
+
+        def clean_env_file(file_path):
+            if not os.path.exists(file_path):
+                return False
+                
+            with open(file_path, "r") as f:
+                lines = f.readlines()
+            
+            new_lines = []
+            for line in lines:
+                is_removed = False
+                for key in env_vars_to_clear:
+                    if line.strip().startswith(key + "="):
+                        is_removed = True
+                        break
+                if not is_removed:
+                    new_lines.append(line)
+            
+            # If the file becomes empty or only has comments/newlines, maybe we don't need to keep it?
+            # But simpler to just write it back.
+            with open(file_path, "w") as f:
+                f.writelines(new_lines)
+            return True
+
+        env_path = cls.get_env_path()
+        if clean_env_file(env_path):
+            print(f"Core configuration cleared from: {env_path}")
+        else:
+            print(f"No configuration file found at: {env_path}")
+            
+        # Also clean local .env if it exists
+        local_env = os.path.join(os.getcwd(), ".env")
+        if clean_env_file(local_env):
+            print(f"Core configuration cleared from local file: {local_env}")
+            
+        # Clear environment variables from memory
+        for var in env_vars_to_clear:
             if var in os.environ:
                 del os.environ[var]
         

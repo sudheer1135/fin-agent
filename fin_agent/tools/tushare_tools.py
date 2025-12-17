@@ -441,6 +441,7 @@ def get_long_tail_stocks(min_mv=10, max_mv=200, max_pe=40, max_pb=5,
 def screen_stocks(pe_min=None, pe_max=None, pb_min=None, pb_max=None, 
                   mv_min=None, mv_max=None, dv_min=None, 
                   turnover_min=None, turnover_max=None,
+                  net_profit_min=None,
                   industry=None, limit=20):
     """
     Screen stocks based on fundamental and technical indicators.
@@ -524,6 +525,28 @@ def screen_stocks(pe_min=None, pe_max=None, pb_min=None, pb_max=None,
         if turnover_max is not None:
             df_daily = df_daily[df_daily['turnover_rate'] <= float(turnover_max)]
             
+        # Estimate Net Profit (TTM) from Total MV and PE TTM
+        # Net Profit = Total MV / PE TTM
+        # total_mv is in 10k, so result is in 10k
+        if net_profit_min is not None:
+            # Avoid division by zero or negative PE (loss) if we strictly want profit
+            # If PE is negative, profit is negative.
+            # We construct a temporary column for filtering
+            # Handle potential zeros in pe_ttm to avoid inf
+            # We only care if pe_ttm > 0 for positive profit check usually
+            
+            # Create a mask for valid calculation
+            valid_pe = (df_daily['pe_ttm'] != 0) & (df_daily['pe_ttm'].notna()) & (df_daily['total_mv'].notna())
+            
+            # Calculate estimated profit for valid rows
+            # Initialize with -inf or NaN
+            estimated_profit = pd.Series(index=df_daily.index, dtype=float)
+            estimated_profit[valid_pe] = df_daily.loc[valid_pe, 'total_mv'] / df_daily.loc[valid_pe, 'pe_ttm']
+            
+            # Filter
+            # If net_profit_min >= 0, we imply we need positive profit, so negative PE rows (negative profit) are excluded naturally if we calculate correctly (MV is pos, PE neg -> Profit neg)
+            df_daily = df_daily[estimated_profit >= float(net_profit_min)]
+
         # 4. Return results
         if df_daily.empty:
             return "No stocks found matching the criteria."
@@ -913,7 +936,7 @@ BASE_TOOLS_SCHEMA = [
                     "dv_min": {"type": "number", "description": "Minimum Dividend Yield (%). e.g., 3 for >3%."},
                     "turnover_min": {"type": "number", "description": "Minimum Turnover Rate (%)."},
                     "turnover_max": {"type": "number", "description": "Maximum Turnover Rate (%)."},
-                    "net_profit_min": {"type": "number", "description": "Minimum Net Main Force Inflow (in 10k/Wan CNY). e.g., 1000 for 1000 Wan."},
+                    "net_profit_min": {"type": "number", "description": "Minimum Net Profit (TTM) (in 10k/Wan CNY). Estimated from MV/PE."},
                     "industry": {"type": "string", "description": "Industry name to filter by (fuzzy match). e.g., '银行', '半导体'."},
                     "limit": {"type": "integer", "description": "Max number of results to return. Default 20."}
                 },
@@ -984,10 +1007,26 @@ TOOLS_SCHEMA = BASE_TOOLS_SCHEMA + PORTFOLIO_TOOLS_SCHEMA + SCHEDULER_TOOLS_SCHE
 # Helper to execute tool calls
 def execute_tool_call(tool_name, arguments):
     if isinstance(arguments, str):
-        try:
-            arguments = json.loads(arguments)
-        except json.JSONDecodeError:
-            return "Error: Invalid JSON arguments."
+        if not arguments.strip():
+            arguments = {}
+        else:
+            try:
+                arguments = json.loads(arguments)
+            except json.JSONDecodeError:
+                # Try to fix common JSON issues or handle python dict string
+                try:
+                    import ast
+                    # Fallback for single quotes or python-style dicts
+                    val = ast.literal_eval(arguments)
+                    if isinstance(val, dict):
+                        arguments = val
+                    else:
+                        return "Error: Invalid JSON arguments (not a dict)."
+                except:
+                    return "Error: Invalid JSON arguments."
+    
+    if arguments is None:
+        arguments = {}
 
     if tool_name == "get_current_time":
         return get_current_time()

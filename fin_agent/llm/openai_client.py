@@ -2,10 +2,11 @@ from openai import OpenAI
 from fin_agent.llm.base import LLMBase
 
 class OpenAICompatibleClient(LLMBase):
-    def __init__(self, api_key, base_url, model):
+    def __init__(self, api_key, base_url, model, default_headers=None):
         self.client = OpenAI(
             api_key=api_key,
-            base_url=base_url
+            base_url=base_url,
+            default_headers=default_headers
         )
         self.model = model
 

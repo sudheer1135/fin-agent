@@ -297,6 +297,16 @@ class FinAgent:
                     # Execute tool
                     tool_result = execute_tool_call(function_name, arguments)
                     
+                    # Check for config reset to reload LLM
+                    if function_name == "reset_core_config":
+                        print(f"{Fore.GREEN}Reloading LLM configuration...{Style.RESET_ALL}")
+                        try:
+                            # Re-create LLM instance with new config
+                            self.llm = LLMFactory.create_llm()
+                            print(f"{Fore.GREEN}LLM re-initialized successfully.{Style.RESET_ALL}")
+                        except Exception as e:
+                            print(f"{Fore.RED}Error re-initializing LLM: {str(e)}{Style.RESET_ALL}")
+
                     # Truncate result if too long for display, but keep full for LLM (context window permitting)
                     display_result = tool_result[:200] + "..." if len(str(tool_result)) > 200 else tool_result
                     print(f"{Fore.BLUE}Tool Result: {display_result}{Style.RESET_ALL}")
