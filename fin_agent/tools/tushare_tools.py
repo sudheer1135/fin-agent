@@ -313,6 +313,131 @@ def get_concept_detail(concept_name=None, ts_code=None):
     except Exception as e:
         return f"Error fetching concept detail: {str(e)}"
 
+def get_long_tail_stocks(min_mv=10, max_mv=200, max_pe=40, max_pb=5, 
+                        max_turnover=3.0, check_consolidation=False, 
+                        check_volume_spike=False, limit=20):
+    """
+    Discovery of long-tail/neglected stocks.
+    Criteria:
+    - Small/Mid Cap (default 10-200 Yi)
+    - Value (PE < 40, PB < 5)
+    - Neglected (Turnover < 3%)
+    - Optional: Long-term consolidation (Low volatility)
+    - Optional: Abnormal volume (Volume spike)
+    """
+    try:
+        pro = get_pro()
+        
+        # 1. Get latest trading date
+        now = datetime.now()
+        df_daily = pd.DataFrame()
+        found_date = None
+        
+        # Try last 5 days to find data
+        for i in range(5):
+            date_str = (now - timedelta(days=i)).strftime('%Y%m%d')
+            try:
+                # Fetch daily basic
+                df = pro.daily_basic(trade_date=date_str, 
+                                   fields='ts_code,trade_date,close,pe_ttm,pb,total_mv,turnover_rate,volume_ratio')
+                if not df.empty:
+                    df_daily = df
+                    found_date = date_str
+                    break
+            except:
+                continue
+        
+        if df_daily.empty:
+            return "Error: Could not fetch daily basic data."
+            
+        # 2. Basic Filtering
+        # Market Value: Tushare total_mv is in 10k CNY. So 1 Yi = 10,000 unit.
+        mv_min_val = float(min_mv) * 10000
+        mv_max_val = float(max_mv) * 10000
+        
+        mask = (df_daily['total_mv'] >= mv_min_val) & \
+               (df_daily['total_mv'] <= mv_max_val) & \
+               (df_daily['pe_ttm'] > 0) & (df_daily['pe_ttm'] <= float(max_pe)) & \
+               (df_daily['pb'] <= float(max_pb)) & \
+               (df_daily['turnover_rate'] <= float(max_turnover))
+               
+        candidates = df_daily[mask].copy()
+        
+        if candidates.empty:
+            return "No stocks found matching the basic long-tail criteria."
+            
+        # 3. Advanced Filtering (Consolidation / Volume Spike)
+        # If requested, we limit candidates to top 50 (by lowest turnover) before fetching history to save time/quota
+        if check_consolidation or check_volume_spike:
+            # Sort by turnover first to process most neglected ones
+            candidates = candidates.sort_values('turnover_rate').head(50)
+            final_ts_codes = []
+            
+            # Start date for history (90 days for consolidation check)
+            start_date = (datetime.strptime(found_date, '%Y%m%d') - timedelta(days=90)).strftime('%Y%m%d')
+            
+            for index, row in candidates.iterrows():
+                try:
+                    df_hist = pro.daily(ts_code=row['ts_code'], start_date=start_date, end_date=found_date)
+                    if df_hist.empty or len(df_hist) < 20:
+                        continue
+                        
+                    is_valid = True
+                    
+                    # Check Consolidation (Low Volatility)
+                    # Std Dev of Close Price / Mean Close Price
+                    if check_consolidation:
+                        # Use last 60 days
+                        df_window = df_hist.head(60)
+                        if len(df_window) > 10:
+                            volatility = df_window['close'].std() / df_window['close'].mean()
+                            # Threshold: < 0.15 (15%) implies relatively stable
+                            if volatility > 0.15: 
+                                is_valid = False
+                    
+                    # Check Volume Spike
+                    # Latest volume vs Avg volume of previous days
+                    if is_valid and check_volume_spike:
+                        # Ensure we have enough data
+                        if len(df_hist) > 20:
+                            latest_vol = df_hist.iloc[0]['vol']
+                            # Avg of next 20 days (previous in time)
+                            avg_vol = df_hist.iloc[1:21]['vol'].mean()
+                            # Expect > 2.0x volume spike
+                            if avg_vol == 0 or latest_vol / avg_vol < 2.0:
+                                is_valid = False
+                                
+                    if is_valid:
+                        final_ts_codes.append(row['ts_code'])
+                        
+                except Exception:
+                    continue
+            
+            # Filter main df
+            if not final_ts_codes:
+                 return "No stocks found matching the advanced criteria (Consolidation/Volume Spike)."
+            candidates = candidates[candidates['ts_code'].isin(final_ts_codes)]
+        
+        # 4. Final Result Preparation
+        # Fetch names
+        df_basic = pro.stock_basic(exchange='', list_status='L', fields='ts_code,name,industry,area')
+        
+        result = pd.merge(candidates, df_basic, on='ts_code', how='left')
+        
+        # Sort logic
+        if check_volume_spike:
+            result = result.sort_values('volume_ratio', ascending=False)
+        else:
+            # Sort by Turnover (Ascending) for "most neglected"
+            result = result.sort_values('turnover_rate', ascending=True)
+            
+        result = result.head(limit)
+        
+        return result.to_json(orient='records', force_ascii=False)
+
+    except Exception as e:
+        return f"Error executing long-tail stock discovery: {str(e)}"
+
 def screen_stocks(pe_min=None, pe_max=None, pb_min=None, pb_max=None, 
                   mv_min=None, mv_max=None, dv_min=None, 
                   turnover_min=None, turnover_max=None,
@@ -799,6 +924,27 @@ BASE_TOOLS_SCHEMA = [
     {
         "type": "function",
         "function": {
+            "name": "get_long_tail_stocks",
+            "description": "Discover long-tail, neglected stocks or hidden champions. Screen for low turnover, small/mid cap, good value, and optionally consolidation or volume spikes.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "min_mv": {"type": "number", "description": "Min Market Value in Yi (100M). Default 10."},
+                    "max_mv": {"type": "number", "description": "Max Market Value in Yi (100M). Default 200 (Mid Cap)."},
+                    "max_pe": {"type": "number", "description": "Max PE Ratio (TTM). Default 40."},
+                    "max_pb": {"type": "number", "description": "Max PB Ratio. Default 5."},
+                    "max_turnover": {"type": "number", "description": "Max Turnover Rate (%). Default 3.0 (Neglected)."},
+                    "check_consolidation": {"type": "boolean", "description": "If true, checks for long-term low volatility (consolidation)."},
+                    "check_volume_spike": {"type": "boolean", "description": "If true, checks for recent abnormal volume spike."},
+                    "limit": {"type": "integer", "description": "Max results. Default 20."}
+                },
+                "required": []
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "run_backtest",
             "description": "Run a historical backtest for a trading strategy on a specific stock.",
             "parameters": {
@@ -875,6 +1021,8 @@ def execute_tool_call(tool_name, arguments):
         return get_technical_patterns(**arguments)
     elif tool_name == "screen_stocks":
         return screen_stocks(**arguments)
+    elif tool_name == "get_long_tail_stocks":
+        return get_long_tail_stocks(**arguments)
     elif tool_name == "run_backtest":
         return run_backtest(**arguments)
     elif tool_name == "add_portfolio_position":

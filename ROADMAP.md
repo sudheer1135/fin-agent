@@ -34,6 +34,8 @@
     - [x] 抽象 LLM 接口层，支持配置切换不同模型。
     - [x] 接入国内大模型 (Kimi, 智谱 GLM-4, 阿里 Qwen)。
     - [x] 支持本地模型 (通过 Ollama 接入 Llama 3, Mistral)。
+    - [x] OpenRouter (Gemini3, claude-sonnet-4.5, GPT5.2)。
+
 - [x] **技术指标计算**：
     - [x] 内置常见指标计算 (MACD, RSI, KDJ, BOLL)。
     - [x] 自动识别技术形态 (如“金叉”、“底背离”)。
@@ -51,9 +53,14 @@
     - [x] 自定义条件监控与即时消息推送。
     - [x] 用户投资风格画像与偏好记忆 (Long-term Memory)。
 
-- [ ] **智能记忆与上下文管理 (Smart Memory & Context)**
+- [x] **智能记忆与上下文管理 (Smart Memory & Context)**
     - [x] 多轮对话上下文保持 (Multi-turn Context)。
     - [x] 历史对话摘要与跨会话记忆 (Session Summary & Recall)。
+
+- [x] **长尾低关注度股票挖掘 (Long-tail/Neglected Stock Discovery)**
+    - [x] 筛选低机构持仓、低研报覆盖但基本面优秀的“冷门股”。
+    - [x] 监控长期横盘后的异常放量与资金异动。
+    - [x] 挖掘细分行业隐形冠军与被低估的烟蒂股。
 
 - [ ] **全资产覆盖与宏观视角 (Multi-Asset & Macro)**
     - [ ] 扩展 ETF、可转债、期货等投资品种数据。
@@ -64,6 +71,7 @@
     - [ ] 支持自定义因子表达式与多因子选股模型。
     - [ ] 提供常用的量化策略模板 (网格交易、趋势跟随等)。
     - [ ] 策略参数优化与历史回测报告生成。
+
 
 - [ ] **行业产业链图谱与竞争分析 (Industry Knowledge Graph)**
     - [ ] 构建行业上下游产业链知识图谱。
