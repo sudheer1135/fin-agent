@@ -62,10 +62,14 @@
     - [x] 监控长期横盘后的异常放量与资金异动。
     - [x] 挖掘细分行业隐形冠军与被低估的烟蒂股。
 
-- [ ] **全资产覆盖与宏观视角 (Multi-Asset & Macro)**
-    - [ ] 扩展 ETF、可转债、期货等投资品种数据。
-    - [ ] 接入宏观经济数据 (GDP, CPI, M2, 利率等)。
-    - [ ] 全球市场指数对比与大类资产配置建议。
+- [x] **全资产覆盖与宏观视角 (Multi-Asset & Macro)**
+    - [x] **港股行情支持**：接入港股市场数据，支持港股实时行情、历史行情查询。
+    - [x] **美股行情支持**：接入美股市场数据，支持美股实时行情、历史行情查询。
+    - [x] **ETF数据支持**：扩展ETF基本信息查询和日线行情数据 (`get_etf_basic`, `get_etf_daily_price`)。
+    - [x] **可转债数据支持**：扩展可转债基本信息查询和日线行情数据 (`get_cb_basic`, `get_cb_daily_price`)。
+    - [x] **期货数据支持**：扩展期货合约基本信息查询和日线行情数据 (`get_futures_basic`, `get_futures_daily_price`)。
+    - [x] **宏观经济数据**：接入宏观经济数据工具 (`get_macro_gdp`, `get_macro_cpi`, `get_macro_m2`, `get_macro_interest_rate`)，支持GDP、CPI、M2、利率等数据查询。
+    - [x] **全球市场指数对比**：实现全球市场指数对比工具 (`get_global_index_comparison`)，支持多市场指数数据对比分析。
 
 - [ ] **量化因子挖掘与回测实验室 (Quant Factor Lab)**
     - [ ] 支持自定义因子表达式与多因子选股模型。
