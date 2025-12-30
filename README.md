@@ -2,6 +2,7 @@
 
 <div align="center">
 
+[![Website](https://img.shields.io/badge/Website-fin--agent.chat-blue?style=flat-square)](https://www.fin-agent.chat/)
 [![PyPI version](https://img.shields.io/pypi/v/fin-agent.svg?style=flat-square)](https://pypi.org/project/fin-agent/)
 [![Python Versions](https://img.shields.io/pypi/pyversions/fin-agent.svg?style=flat-square)](https://pypi.org/project/fin-agent/)
 [![License](https://img.shields.io/github/license/YUHAI0/fin-agent.svg?style=flat-square)](https://github.com/YUHAI0/fin-agent/blob/main/LICENSE)
